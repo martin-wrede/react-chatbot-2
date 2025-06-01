@@ -1,14 +1,16 @@
-export async function POST(context) {
+export async function onRequestPost(context) {
   const { request, env } = context;
   
   try {
     const { messages, uploadedFileContent } = await request.json();
     
+    // System message
     const systemMessage = {
       role: 'system',
       content: "Explain things like you're talking to a software professional with 2 years of experience."
     };
 
+    // Enhance system message with uploaded file content if available
     const enhancedSystemMessage = uploadedFileContent
       ? {
           ...systemMessage,
@@ -16,15 +18,17 @@ export async function POST(context) {
         }
       : systemMessage;
 
+    // Prepare the API request body
     const body = {
       model: "gpt-3.5-turbo",
       messages: [enhancedSystemMessage, ...messages]
     };
 
+    // Make request to OpenAI API
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.VITE_OPENAI_API_KEY}`,
+      headers: {                  // VITE_APP_OPENAI_API_KEY
+        Authorization: `Bearer ${env.VITE_APP_OPENAI_API_KEY}`, 
         "Content-Type": "application/json"
       },
       body: JSON.stringify(body)
@@ -61,7 +65,8 @@ export async function POST(context) {
   }
 }
 
-export async function OPTIONS() {
+// Handle CORS preflight requests
+export async function onRequestOptions() {
   return new Response(null, {
     headers: {
       'Access-Control-Allow-Origin': '*',
