@@ -1,40 +1,44 @@
+export async function onRequest(context) {
+  const { request, env } = context;
+  
+  console.log('Function called with method:', request.method);
+  console.log('Request URL:', request.url);
+  
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Content-Type': 'application/json'
+  };
+  
+  // Handle CORS preflight
+  if (request.method === 'OPTIONS') {
+    console.log('Handling OPTIONS request');
+    return new Response(null, {
+      headers: corsHeaders
+    });
+  }
 
+  // For debugging - allow GET requests to test if function is working
+  if (request.method === 'GET') {
+    console.log('Handling GET request for testing');
+    return new Response('AI function is working! Send a POST request with chat data.', {
+      headers: {
+        'Content-Type': 'text/plain',
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
+  }
 
-// functions/ai.js
-export default {
-  async fetch(request, env, ctx) {
-    // Handle CORS preflight
-    if (request.method === 'OPTIONS') {
-      return new Response(null, {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type'
-        }
-      });
-    }
-
-    // Only allow POST requests
-    if (request.method !== 'POST') {
-      return new Response('Method not allowed', { 
-        status: 405,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Content-Type': 'text/plain'
-        }
-      });
-    }
-
-    // Add CORS headers
-    const corsHeaders = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-      'Content-Type': 'application/json'
-    };
+  // Handle POST requests
+  if (request.method === 'POST') {
+    console.log('Handling POST request');
     
     try {
-      const { messages, uploadedFileContent } = await request.json();
+      const requestBody = await request.json();
+      console.log('Request body received:', requestBody);
+      
+      const { messages, uploadedFileContent } = requestBody;
       
       const systemMessage = {
         role: 'system',
@@ -53,7 +57,6 @@ export default {
         messages: [enhancedSystemMessage, ...messages]
       };
 
-      // Check if API key exists
       if (!env.OPENAI_API_KEY) {
         console.error('OPENAI_API_KEY environment variable is not set');
         return new Response(JSON.stringify({ 
@@ -64,9 +67,7 @@ export default {
         });
       }
 
-      console.log('Making request to OpenAI API...');
-      console.log('Request body:', JSON.stringify(body, null, 2));
-      
+      console.log('Making request to OpenAI...');
       const response = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -75,22 +76,22 @@ export default {
         },
         body: JSON.stringify(body)
       });
-      
-      console.log('OpenAI response status:', response.status);
 
       if (!response.ok) {
-        console.error(`OpenAI API error: ${response.status} ${response.statusText}`);
         const errorText = await response.text();
-        console.error('Error details:', errorText);
-        throw new Error(`OpenAI API error: ${response.status}`);
+        console.error(`OpenAI API error: ${response.status} - ${errorText}`);
+        return new Response(JSON.stringify({ 
+          reply: `OpenAI API error: ${response.status}` 
+        }), {
+          status: 500,
+          headers: corsHeaders
+        });
       }
 
       const data = await response.json();
-      console.log('OpenAI response data:', data);
       const reply = data.choices?.[0]?.message?.content || "Sorry, I encountered an error.";
 
-      console.log('Successfully got response from OpenAI');
-
+      console.log('Sending successful response');
       return new Response(JSON.stringify({ reply }), {
         headers: corsHeaders
       });
@@ -99,11 +100,18 @@ export default {
       console.error('Error processing chat message:', error);
       
       return new Response(JSON.stringify({ 
-        reply: "Sorry, I encountered a network error." 
+        reply: "Sorry, I encountered a network error: " + error.message 
       }), {
         status: 500,
         headers: corsHeaders
       });
     }
   }
-};
+
+  // Method not allowed
+  console.log('Method not allowed:', request.method);
+  return new Response(`Method ${request.method} not allowed`, { 
+    status: 405,
+    headers: corsHeaders
+  });
+}
